@@ -25,7 +25,7 @@
  *
  */  
     
-    DFT = function(_bufferSize, _sampleRate) {
+    p.DFT = function(_bufferSize, _sampleRate) {
       var bufferSize = _bufferSize;
       var sampleRate = _sampleRate;
       
@@ -72,7 +72,7 @@
       return self;
     }
       
-    FFT = function(_bufferSize, _sampleRate) {
+    p.FFT = function(_bufferSize, _sampleRate) {
       var bufferSize = _bufferSize;
       var sampleRate = _sampleRate;
 
@@ -599,9 +599,4 @@
     	}
     }
     
-    // register objects with processing.js
-    if ( typof(p) != 'undefined' ) {
-      p.DFT = DFT;
-      p.FFT = FFT;
-      p.BeatDetektor = BeatDetektor;
-    }
+    p.BeatDetektor = BeatDetektor;

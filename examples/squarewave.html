@@ -8,64 +8,54 @@
     // Setup shared variables
     var bufferSize = 512;
     var sampleRate = 44100.0;
-    
-    var signal = [];
-    
+
     var fft;
-    
+    var sine;
     </script>
     
     <script target="#signal" type="application/processing">
     import('pjsaudio.lib.js');
     
-    int harmonic = 1;
+    int nthHarmonic = 1;
     float frequency = 345.0;
     float scale = 30.0;
 
     void setup() {
       size(bufferSize, 100);
-      frameRate(10);
+      frameRate(60);
       
       fft = FFT(bufferSize, sampleRate);
       
-      generateBaseSignal();
+      sine = Oscillator(SINEWAVE, frequency, 1, bufferSize, sampleRate);
+      sine.generate();
     }
 
     void draw() {
       background(0, 60);
       
-      if (harmonic > 40 ) 
+      if (nthHarmonic > 40 ) 
       {
-        harmonic = 1;
-        generateBaseSignal();
+        nthHarmonic = 1;
+        sine.generate();
       }
       
       // Add harmonic
-      if ( harmonic > 1 ) {
-        for(int i = 0; i < bufferSize; i++) {
-          float step = i * (frequency * harmonic / sampleRate) % 1;
-          signal[i] += (float) Math.sin(TWO_PI * step) * (1 / harmonic);
-        }
+      if ( nthHarmonic > 1 ) {
+        harmonic = Oscillator(SINEWAVE, frequency*nthHarmonic, 1/nthHarmonic, bufferSize, sampleRate); 
+        sine.add(harmonic); 
       }
       
-      harmonic += 2; // 3rd, 5th, 7th, 9th, etc
+      nthHarmonic += 2; // 3rd, 5th, 7th, 9th, etc
      
       // Calculate forward transform
-      fft.forward(signal);
+      fft.forward(sine.signal);
       
       // Draw additive signal
-      stroke(100, 255 - (2 * harmonic), 2 * harmonic);
+      stroke(100, 255 - (2 * nthHarmonic), 2 * nthHarmonic);
       strokeWeight(1.5);
       
       for ( int i = 0; i < bufferSize - 1; i++ ) {
-        line(i, scale + 10 - signal[i] * scale, i+1, scale + 10 - signal[i+1] * scale);
-      }
-    }
-    
-    void generateBaseSignal() {
-      for(int i = 0; i < bufferSize; i++) {
-        float step = i * (frequency / sampleRate) % 1;
-        signal[i] = (float) Math.sin(TWO_PI * step);
+        line(i, scale + 10 - sine.signal[i] * scale, i+1, scale + 10 - sine.signal[i+1] * scale);
       }
     }
     </script>

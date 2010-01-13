@@ -109,7 +109,7 @@
         
         forward: function(buffer) {
           if ( bufferSize % 2 != 0 ) throw "Invalid buffer size, must be a power of 2.";
-          if ( bufferSize != buffer.length ) throw "Supplied buffer is not the same size as defined FFT.";
+          if ( bufferSize != buffer.length ) throw "Supplied buffer is not the same size as defined FFT. FFT Size: " + bufferSize + " Buffer Size: " + buffer.length;
 
           for ( var i = 0; i < buffer.length; i++ ) {
             self.complexValues[i] = {real: buffer[self.reverseTable[i]], imag: 0.0};
@@ -158,6 +158,108 @@
       self.buildReverseTable();
       self.buildTrigTables();
 
+      return self;
+    }
+    
+    SINEWAVE = 1;
+    SQUAREWAVE = 2;
+    SAWWAVE = 3;
+    TRIANGLEWAVE =4;
+    
+    /*  Oscillator Signal Generator
+     *    
+     *  Usage: var sine = Oscillator(SINEWAVE, 440.0, 1, 2048, 44100);
+     *         var signal = sine.generate();
+     *
+     */
+    p.Oscillator = function(_waveform, _frequency, _amplitude, _bufferSize, _sampleRate) {
+      var waveform = _waveform;
+      var frequency = _frequency;
+      var amplitude = _amplitude;
+      var bufferSize = _bufferSize;
+      var sampleRate = _sampleRate;
+      
+      var frameCount = 0;
+      var frameOffset = frameCount * bufferSize;
+      var cyclesPerSample = frequency / sampleRate;
+      
+      var TWO_PI = 2*Math.PI;
+      
+      var self = {
+        signal: new Array(bufferSize),
+        
+        setAmp: function(_amplitude) {
+          if (_amplitude >= 0 && _amplitude <= 1) {
+            amplitude = amplitude;
+          } else {
+            throw "Amplitude out of range (0..1).";
+          }
+        },
+        
+        setFreq: function(_frequency) {
+          frequency = _frequency;
+          cyclesPerSample = frequency / sampleRate;
+        },
+        
+        add: function(_oscillator) {
+          for ( var i = 0; i < bufferSize; i++ ) {
+            self.signal[i] += _oscillator.valueAt(i);
+          }
+          
+          return self.signal;
+        },
+        
+        valueAt: function(_offset) {
+          var value;
+          var step = _offset * cyclesPerSample % 1;
+          
+          switch(waveform) {
+            case SINEWAVE:
+              value = Math.sin(TWO_PI * step);
+              break;
+            case SQUAREWAVE:
+              value = step < 0.5 ? 1 : -1;
+              break;
+            case SAWWAVE:
+              value = 2 * (step - Math.round(step));
+              break;
+            case TRIANGLEWAVE:
+              value = 1 - 4 * Math.abs(Math.round(step) - step);
+              break;
+          }
+          
+          return value * amplitude;
+        },
+        
+        generate: function() {
+          for ( var i = 0; i < bufferSize; i++ ) {
+            self.signal[i] = self.valueAt(frameOffset + i);
+            /*
+            var step = (frameOffset + i) * cyclesPerSample % 1;
+            switch(waveform) {
+              case SINEWAVE:
+                self.signal[i] = Math.sin(TWO_PI * step);
+                break;
+              case SQUAREWAVE:
+                self.signal[i] = step < 0.5 ? 1 : -1;
+                break;
+              case SAWWAVE:
+                self.signal[i] = 2 * (step - Math.round(step));
+                break;
+              case TRIANGLEWAVE:
+              default:
+                self.signal[i] = 1 - 4 * Math.abs(Math.round(step) - step);
+                break;
+            }
+            self.signal[i] *= amplitude;
+            */
+          }
+          frameCount++;
+          
+          return self.signal;
+        }
+      };
+      
       return self;
     }
     

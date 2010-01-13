@@ -2,6 +2,7 @@
   <head>      
     <script language="javascript" src="processing.js"></script>
     <script language="javascript" src="init.js"></script>
+    <script src="../pjsaudio.lib.js"></script>
   </head>
   <body>
     <script>
@@ -14,10 +15,8 @@
     </script>
     
     <script target="#signal" type="application/processing">
-    import('pjsaudio.lib.js');
-    
     int nthHarmonic = 1;
-    float frequency = 345.0;
+    float frequency = 344.53;
     float scale = 30.0;
 
     void setup() {

@@ -2,6 +2,7 @@
   <head>      
     <script language="javascript" src="processing.js"></script>
     <script language="javascript" src="init.js"></script>
+    <script src="../pjsaudio.lib.js"></script>
   </head>
   <body>
     <script>
@@ -14,11 +15,9 @@
     </script>
     
     <script target="#signal" type="application/processing">
-    import('pjsaudio.lib.js');
-    
     float scale = 30.0;
 
-    float frequency = 440.0;
+    float frequency = 689.06;
     float amplitude = 1.0;
 
     void setup() {
@@ -41,7 +40,7 @@
       sine.setAmp(amplitude);
 
       sine.generate();
-      
+
       // Calculate forward transform
       fft.forward(sine.signal);
       

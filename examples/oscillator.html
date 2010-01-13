@@ -16,9 +16,10 @@
     <script target="#signal" type="application/processing">
     import('pjsaudio.lib.js');
     
-    int nthHarmonic = 1;
-    float frequency = 345.0;
     float scale = 30.0;
+
+    float frequency = 440.0;
+    float amplitude = 1.0;
 
     void setup() {
       size(bufferSize, 100);
@@ -26,32 +27,26 @@
       
       fft = FFT(bufferSize, sampleRate);
       
-      sine = Oscillator(SINEWAVE, frequency, 1, bufferSize, sampleRate);
+      sine = Oscillator(SINEWAVE, frequency, amplitude, bufferSize, sampleRate);
       sine.generate();
     }
 
     void draw() {
-      background(0, 60);
+      background(0);
 
-      if (nthHarmonic > 40 ) 
-      {
-        nthHarmonic = 1;
-        sine.generate();
-      }
-      
-      // Add harmonic
-      if ( nthHarmonic > 1 ) {
-        harmonic = Oscillator(SINEWAVE, frequency*nthHarmonic, 1/nthHarmonic, bufferSize, sampleRate); 
-        sine.add(harmonic); 
-      }
-      
-      nthHarmonic += 2; // 3rd, 5th, 7th, 9th, etc
+      frequency = mouseX;
+      amplitude = mouseY / height; 
 
+      sine.setFreq(frequency);
+      sine.setAmp(amplitude);
+
+      sine.generate();
+      
       // Calculate forward transform
       fft.forward(sine.signal);
       
       // Draw additive signal
-      stroke(100, 255 - (2 * nthHarmonic), 2 * nthHarmonic);
+      stroke(255);
       strokeWeight(1.5);
       
       for ( int i = 0; i < bufferSize - 1; i++ ) {
@@ -78,14 +73,13 @@
     } 
     </script>
     
-    <h1>Building a Square wave</h1>
-    <p>Any complex waveform can be made up of simple sinusoids.</p>
-    <p>A square wave is made by first starting with a sine wave then adding every other nth harmonic at frequency nth * the base frequency and amplitude of 1/n</p>
-    <p>FFT breaks down a waveform into its sinusoidal components to measure the amplitude of the frequencies.</p> 
-    
-    <b>1.</b> Additive sine waves combine to form a complex square wave.
+    <h1>Oscillator</h1>
+    <p>Renders an Oscillator generated sine wave</p>
+    <p>Hover the mouse over the wave to change its frequency (x) and amplitude (y)</p>
+
+    <b>1.</b> Generated Sine wave.
     <div><canvas id="signal" width="200px" height="200px"></canvas></div>
-    <b>2.</b> The FFT graphs the harmonics frequencies as the square wave takes form.
+    <b>2.</b> The FFT graphs the frequencies of the generated wave form.
     <div><canvas id="fft" width="200px" height="200px"></canvas></div>
   </body>
 </html>

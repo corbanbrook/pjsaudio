@@ -161,17 +161,18 @@
       return self;
     }
     
-    SINEWAVE = 1;
-    SQUAREWAVE = 2;
-    SAWWAVE = 3;
-    TRIANGLEWAVE =4;
-    
     /*  Oscillator Signal Generator
      *    
      *  Usage: var sine = Oscillator(SINEWAVE, 440.0, 1, 2048, 44100);
      *         var signal = sine.generate();
      *
      */
+     
+    SINEWAVE = 1;
+    SQUAREWAVE = 2;
+    SAWWAVE = 3;
+    TRIANGLEWAVE =4;
+    
     p.Oscillator = function(_waveform, _frequency, _amplitude, _bufferSize, _sampleRate) {
       var waveform = _waveform;
       var frequency = _frequency;
@@ -180,7 +181,7 @@
       var sampleRate = _sampleRate;
       
       var frameCount = 0;
-      var frameOffset = frameCount * bufferSize;
+      
       var cyclesPerSample = frequency / sampleRate;
       
       var TWO_PI = 2*Math.PI;
@@ -190,7 +191,7 @@
         
         setAmp: function(_amplitude) {
           if (_amplitude >= 0 && _amplitude <= 1) {
-            amplitude = amplitude;
+            amplitude = _amplitude;
           } else {
             throw "Amplitude out of range (0..1).";
           }
@@ -232,27 +233,9 @@
         },
         
         generate: function() {
+          var frameOffset = frameCount * bufferSize;
           for ( var i = 0; i < bufferSize; i++ ) {
             self.signal[i] = self.valueAt(frameOffset + i);
-            /*
-            var step = (frameOffset + i) * cyclesPerSample % 1;
-            switch(waveform) {
-              case SINEWAVE:
-                self.signal[i] = Math.sin(TWO_PI * step);
-                break;
-              case SQUAREWAVE:
-                self.signal[i] = step < 0.5 ? 1 : -1;
-                break;
-              case SAWWAVE:
-                self.signal[i] = 2 * (step - Math.round(step));
-                break;
-              case TRIANGLEWAVE:
-              default:
-                self.signal[i] = 1 - 4 * Math.abs(Math.round(step) - step);
-                break;
-            }
-            self.signal[i] *= amplitude;
-            */
           }
           frameCount++;
           
@@ -587,7 +570,7 @@
     			{
     				bpm_total += this.maa_bpm_range[x];
 
-    				var idx = parseInt(60.0/this.maa_bpm_range[x]);
+    				var idx = parseInt(Math.ceil(60.0/this.maa_bpm_range[x]));
 
     				if (typeof(draft[idx]=='undefined')) draft[idx] = 0;
     				draft[idx]++;
@@ -676,7 +659,7 @@
     		this.beat_counter = parseInt(this.quarter_counter/4);
 
     		// award the winner of this iteration
-    		var idx = Math.ceil(60.0/this.current_bpm);
+    		var idx = parseInt(Math.floor(60.0/this.current_bpm));
     		if (typeof(this.bpm_contest[idx])=='undefined') this.bpm_contest[idx] = 0;
     		this.bpm_contest[idx]+=this.config.BD_QUALITY_REWARD;
 

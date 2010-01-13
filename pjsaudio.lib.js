@@ -246,6 +246,58 @@
       return self;
     }
     
+    p.ADSR = function(_attackLength, _decayLength, _sustainLevel, _sustainLength, _releaseLength, _sampleRate) {
+      var attackLength  = _attackLength;
+      var decayLength   = _decayLength;
+      var sustainLevel  = _sustainLevel;
+      var sustainLength = _sustainLength;
+      var releaseLength = _releaseLength;
+      var sampleRate    = _sampleRate;
+      
+      var attackSamples  = attackLength * sampleRate;
+      var decaySamples   = decayLength * sampleRate;
+      var sustainSamples = sustainLength * sampleRate;
+      var releaseSamples = releaseLength * sampleRate;
+      
+      var attack = attackSamples;
+      var decay = attack + decaySamples;
+      var sustain = decay + sustainSamples;
+      var release = sustain + releaseSamples;
+      
+      var samplesProcessed = 0;
+      
+      var self = {
+        trigger: function() {
+          samplesProcessed = 0;
+        },
+        
+        process: function(_buffer) {
+          for ( var i = 0; i < _buffer.length; i++ ) {
+            var amplitude = 0;
+            
+            if ( samplesProcessed <= attack ) {
+              amplitude = 0 + (1 - 0) * ((samplesProcessed - 0) / (attack - 0));
+            } 
+            else if ( samplesProcessed > attack && samplesProcessed <= decay ) {
+              amplitude = 1 + (sustainLevel - 1) * ((samplesProcessed - attack) / (decay - attack));
+            } 
+            else if ( samplesProcessed > decay && samplesProcessed <= sustain ) {
+              amplitude = sustainLevel;
+            } 
+            else if ( samplesProcessed > sustain && samplesProcessed <= release ) {
+              amplitude = sustainLevel + (0 - sustainLevel) * ((samplesProcessed - sustain) / (release - sustain));
+            }
+            _buffer[i] *= amplitude;
+            samplesProcessed++;
+          }
+          
+          return _buffer;
+        }
+      };
+      
+      return self;
+    }
+    
     /*
      *  BeatDetektor.js
      *

@@ -1,11 +1,10 @@
-/*
- *  pjsaudio.lib.js
+/*  
+ *  PJSAudio.lib.js
  *
- *  PJSAudio - a comprehensive audio library for javascript and processing.js
- *             by Corban Brook
- *
+ *  PJSAudio - a comprehensive audio library for javascript/processing.js
+ *  
  *  Created by Corban Brook on 2010-01-10.
- *  Copyright 2010 Corban Brook. All rights reserved.
+ *  Copyright 2009 Cubic Productions. All rights reserved.
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -23,7 +22,13 @@
  *  Please contact corbanbrook@gmail.com if you seek alternate
  *  liscencing terms for your project.
  *
- */  
+ */
+    
+/*  PJSAudio - a comprehensive audio library for javascript/processing.js 
+ *  
+ *  Maintained by Corban Brook <corbanbrook@gmail.com>  
+ *   
+ */
 
 PJSAudio = {
   DFT: function(_bufferSize, _sampleRate) {
@@ -297,7 +302,83 @@ PJSAudio = {
     };
     
     return self;
-  } // END ADSR
+  }, // END ADSR
+  
+  LOWPASS:  1,
+  HIGHPASS: 2,
+  
+  IIRFilter: function(_filter, _frequency, _sampleRate) {
+    var filter = _filter;
+    var frequency = _frequency;
+    var sampleRate = _sampleRate;
+    
+    var a = [];
+    var b = [];
+    
+    var calc = function() {
+      var fracFreq = frequency/sampleRate;
+      switch(filter) {
+      case Processing.LOWPASS:
+        var x = Math.exp(-2*Math.PI * fracFreq);
+            a = [ 1 - x ];
+            b = [ x ];
+        break;
+      case Processing.HIGHPASS:
+        var x = Math.exp(-2 * Math.PI * fracFreq);
+            a = [ (1+x)/2, -(1+x)/2 ];
+            b = [ x ];
+        break;
+      }
+    }
+    
+    calc();
+
+    var memSize = (a.length >= b.length) ? a.length: b.length;
+
+    var input = new Array(memSize);
+    var output = new Array(memSize);
+    
+    for ( var i = 0; i < memSize; i++ ) {
+      input[i] = 0;
+      output[i] = 0;
+    }
+    
+    var self = {
+      setFreq: function(_frequency) {
+        frequency = _frequency;
+        calc();
+      },
+      
+      process: function(_buffer) {
+        for ( var i = 0; i < _buffer.length; i++ ) {
+          var inputLength = input.length;
+          for ( var c = 0; c < inputLength -1; c++ ) {
+            input[c+1] = input[c];
+          }
+          
+          input[0] = _buffer[i];
+        
+          var y = 0;
+          for ( var j = 0; j < a.length; j++ ) {
+            y += a[j] * input[j]; 
+          }
+          for ( var j = 0; j < b.length; j++ ) {
+            y += b[j] * output[j];
+          }
+          
+          var outputLength = output.length;
+          for ( var c = 0; c < outputLength -1; c++ ) {
+            output[c+1] = output[c];
+          }
+          
+          output[0] = y;     
+          _buffer[i] = y;
+        }
+      }
+    };
+    
+    return self;
+  } // END IIRFilter
 };
   
 /*
@@ -327,7 +408,8 @@ PJSAudio = {
  *
  */
 
-/* 
+/*
+
  BeatDetektor class
 
  Restrictions:

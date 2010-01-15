@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <!-- Load JQuery and JQuery-UI -->
+    <link type="text/css" href="css/smoothness/jquery-ui-1.7.2.custom.css" rel="stylesheet" />  
+    <script type="text/javascript" src="js/jquery-1.3.2.min.js"></script>
+    <script type="text/javascript" src="js/jquery-ui-1.7.2.custom.min.js"></script>
+    
+    <!-- Load Processing.js -->
+    <script language="javascript" src="js/processing.js"></script>
+    <script language="javascript" src="js/init.js"></script>
+
+    <!-- Load PJSAudio -->
+    <script src="../pjsaudio.lib.js"></script>
+    <script>
+      $(function() {
+        $('#A').slider({ orientation: 'vertical', range: 'min', value: 0.02, min: 0, max: 1.0, step: 0.01 });
+        $('#D').slider({ orientation: 'vertical', range: 'min', value: 0.6, min: 0, max: 1.0, step: 0.01 });
+        $('#S').slider({ orientation: 'vertical', range: 'min', value: 0.3, min: 0, max: 1.0, step: 0.01 });
+        $('#R').slider({ orientation: 'vertical', range: 'min', value: 0.8, min: 0, max: 5.0, step: 0.01 });
+        $('#cutoff').slider({ orientation: 'vertical', range: 'min', min: 60, max: 11000, step: 1, value: 4000 });
+        $('#res').slider({ orientation: 'vertical', range: 'min', step: 0.01 });
+      });
+    </script>
+
+    <style type="text/css">
+      .envelope {
+        padding: 5px;
+        border: 1px solid black;
+        float: left;
+        margin-right: 5px;
+      }
+      .filter {
+        padding: 5px;
+        border: 1px solid black;
+        float: left;
+      }
+      .slider {
+        float: left;
+        margin: 10px;
+        width: 5px;
+      }
+      .ui-slider .ui-slider-handle {
+        width: 5px;
+        margin-left: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <audio id="audio1"></audio>
+    <script>
+      // Setup shared variables
+      var bufferSize = 512;
+      var sampleRate = 22050.0;
+      var stepTime = 1000 / (sampleRate / bufferSize);
+
+      var SHOW_SEQUENCER = true;
+      var PLAY = true;
+
+      var sequencer = new Array(32);
+      for (var i = 0; i < sequencer.length; i++ ) {
+        sequencer[i] = new Array(24);
+        for(var j = 0; j < sequencer[i].length; j++) {
+          sequencer[i][j] = false;
+        }
+      }
+
+      var sequencerNoteOn = new Array(32);
+      for (var i = 0; i < sequencerNoteOn.length; i++ ) {
+        sequencerNoteOn[i] = new Array(24);
+        for(var j = 0; j < sequencerNoteOn[i].length; j++) {
+          sequencerNoteOn[i][j] = false;
+        }
+      }
+
+      var sequencerStep = 0;
+      var bpm = 60;
+      var oct = 3;
+
+      // Borrowed from F1LTER's code
+      var midiNoteFreq =      /* 0 */ [ 16.35,    17.32,    18.35,    19.45,    20.6,     21.83,    23.12,    24.5,     25.96,    27.5,  29.14,    30.87,
+                              /* 1 */   32.7,     34.65,    36.71,    38.89,    41.2,     43.65,    46.25,    49,       51.91,    55,    58.27,    61.74,
+                              /* 2 */   65.41,    69.3,     73.42,    77.78,    82.41,    87.31,    92.5,     98,       103.83,   110,   116.54,   123.47,
+                              /* 3 */   130.81,   138.59,   146.83,   155.56,   164.81,   174.61,   185,      196,      207.65,   220,   233.08,   246.94,
+                              /* 4 */   261.63,   277.18,   293.66,   311.13,   329.63,   349.23,   369.99,   392,      415.3,    440,   466.16,   493.88,
+                              /* 5 */   523.25,   554.37,   587.33,   622.25,   659.26,   698.46,   739.99,   783.99,   830.61,   880,   932.33,   987.77,
+                              /* 6 */   1046.5,   1108.73,  1174.66,  1244.51,  1318.51,  1396.91,  1479.98,  1567.98,  1661.22,  1760,  1864.66,  1975.53,
+                              /* 7 */   2093,     2217.46,  2349.32,  2489.02,  2637.02,  2793.83,  2959.96,  3135.96,  3322.44,  3520,  3729.31,  3951.07,
+                              /* 8 */   4186.01,  4434.92,  4698.64,  4978 ];
+
+      var fft;
+      var osc;
+      var adsr;
+      var iir;
+
+      var timeStamp = new Date().getTime();
+        
+      var a = document.getElementById('audio1');
+      if ( typeof a.mozSetup == 'function' ) {
+        a.mozSetup(1, sampleRate, 1);
+      }
+    </script>
+    
+    <script target="#signal" type="application/processing">
+      float scale = 90.0;
+      int waveform = 2;
+      int filter = 1;
+      float frequency = 689.06;
+      float amplitude = 1;
+      float cutoff = 200;
+
+      void setup() {
+        size(bufferSize, 200);
+        frameRate(60);
+        
+        fft = FFT(bufferSize, sampleRate);
+
+        adsr = ADSR(0.02, 0.01, 0.3, 0.1, 0.5, sampleRate);
+          
+        iir = IIRFilter(LOWPASS, 200, sampleRate);
+        
+        osc = Oscillator(waveform, frequency, amplitude, bufferSize, sampleRate);
+        osc.generate();
+      }
+
+      void draw() {
+        background(0, 30);
+
+        var sequencerStepTimePerMs = bpm * 8 / 60000;
+
+        var currentTime = new Date().getTime();
+        
+        sequencerStep += (currentTime - timeStamp) * sequencerStepTimePerMs;
+        
+        if ( sequencerStep >= 32 ) {
+          sequencerStep = 0;
+        }
+
+        for ( int i = 0; i < 24; i ++ ) {
+          int col = Math.floor(sequencerStep);
+          if ( sequencer[col][i] == true && !sequencerNoteOn[col][i] ) {
+            sequencerNoteOn[col][i] = true;
+
+            frequency = midiNoteFreq[12*oct+(24-i)];
+            osc = Oscillator(waveform, frequency, amplitude, bufferSize, sampleRate);
+            adsr = ADSR($('#A').slider('option', 'value'), $('#D').slider('option', 'value'), $('#S').slider('option', 'value'), 0.1, $('#R').slider('option', 'value'), sampleRate);
+            adsr.trigger();
+          }
+          if ( sequencer[col][i] == false && col > 0 ) {
+            sequencerNoteOn[col-1][i] = false;
+          } else if ( sequencer[col][i] == false && col == 0 ) {
+            sequencerNoteOn[sequencerNoteOn.length -1][i] = false;
+          }
+        }
+
+        osc.generate();
+        iir.setFreq($('#cutoff').slider('option', 'value'));
+        iir.process(osc.signal);
+        adsr.process(osc.signal);
+        
+        if ( currentTime - timeStamp >= stepTime ) {
+          if ( typeof a.mozWriteAudio == 'function' ) {
+            a.mozWriteAudio(osc.signal.length, osc.signal);
+          }
+          timeStamp = currentTime;
+        }
+
+        // Calculate forward transform
+        //fft.forward(osc.signal);
+
+        if ( SHOW_SEQUENCER ) {
+          stroke(60); 
+          for (int i = 0; i < 24; i++ ) {
+            line(0, i * (height/24), width, i * (height/24));
+          }
+          for (int i = 0; i < 32; i++ ) {
+            if ( i % 8 == 0 ) {
+              strokeWeight(2);
+              stroke(255);
+            } else {
+              stroke(60);
+              strokeWeight(1);
+            }
+            line(i * (width/32), 0, i * (width/32), height);
+            if ( i == Math.floor(sequencerStep) ) {
+              fill(200);
+              rect(i * (width/32), 0, width/32, height);
+            }
+          }
+
+          noStroke();
+          for (int c = 0; c < sequencer.length; c++ ) {
+            for (int r = 0; r < sequencer[c].length; r++ ) {
+              if ( sequencer[c][r] == true ) {
+                fill(255, 100);
+                rect(c * (width/32), r * (height/24), width/32, height/32 + 2);
+                fill(255);
+                rect(c * (width/32) + 2, r * (height/24) + 2, width/32 - 4, height/32 -1);
+              }
+            }
+          }
+        } else {
+          stroke(255);
+          strokeWeight(1.5);
+          for ( int i = 0; i < bufferSize - 1; i++ ) {
+            line(i, scale + 10 - osc.signal[i] * scale, i+1, scale + 10 - osc.signal[i+1] * scale);
+          }
+        }
+      }
+      void mouseReleased() {
+        if ( SHOW_SEQUENCER ) {
+          var col = parseInt(mouseX / (width/32));
+          var row = parseInt(mouseY / (height/24));
+          sequencer[col][row] = !sequencer[col][row];
+        }
+      }
+
+      void keyPressed() {
+        if ( key == 'w' ) {
+          waveform += 1;
+
+          switch(waveform) {
+            case SINEWAVE:
+            case SQUAREWAVE:
+            case SAWWAVE:
+            case TRIANGLEWAVE:
+              break;
+            default:
+              waveform = SINEWAVE;
+              break;
+          }
+        }
+
+        if ( key == 'f' ) {
+          filter += 1;
+
+          switch(filter) {
+            case LOWPASS:
+            case HIGHPASS:
+              break;
+            default:
+              filter = LOWPASS;
+              break;
+          }
+          iir = IIRFilter(filter, cutoff, sampleRate);
+        }
+
+        if ( key == 's' ) {
+          SHOW_SEQUENCER = !SHOW_SEQUENCER;
+        }
+      }
+    </script>
+    
+    <h1>Sequencer</h1>
+    <p>Sequencer controlled oscillator with envelope and filter.</p>
+
+    <p><b>Click in the sequencer grid to plot notes. Switch to the signal view and adjust the envelope and filter to see the resulting waveforms.</b></p>
+    <p>Keyboard Commands:
+      <ul>
+        <li><b>S</b> - toggle between sequencer/signal view</li>
+        <li><b>W</b> - change waveform</li>
+        <li><b>F</b> - toggle filter highpass/lowpass</li>
+      </ul>
+    </p>
+
+    <div><canvas id="signal" width="200px" height="200px"></canvas></div>
+    <div class="envelope">
+      <h3>ADSR Envelope</h3>
+      <div id="A" class="slider"></div>
+      <div id="D" class="slider"></div>
+      <div id="S" class="slider"></div>
+      <div id="R" class="slider"></div>
+    </div>
+    <div class="filter">
+      <h3>Filter</h3>
+      <div id="cutoff" class="slider"></div>
+      <div id="res" class="slider"></div>
+    </div>
+    </body>
+</html>

@@ -187,41 +187,21 @@ PJSAudio = {
     var amplitude = _amplitude;
     var bufferSize = _bufferSize;
     var sampleRate = _sampleRate;
-    
+    var waveLength;
     var frameCount = 0;
     
     var cyclesPerSample = frequency / sampleRate;
     
     var TWO_PI = 2*Math.PI;
     
-    var self = {
-      signal: new Array(bufferSize),
+    var calcWaveLength = function() {
+      var waveLengthSize = Math.round(sampleRate / frequency);
+      waveLength = new Array(waveLengthSize);
       
-      setAmp: function(_amplitude) {
-        if (_amplitude >= 0 && _amplitude <= 1) {
-          amplitude = _amplitude;
-        } else {
-          throw "Amplitude out of range (0..1).";
-        }
-      },
-      
-      setFreq: function(_frequency) {
-        frequency = _frequency;
-        cyclesPerSample = frequency / sampleRate;
-      },
-      
-      add: function(_oscillator) {
-        for ( var i = 0; i < bufferSize; i++ ) {
-          self.signal[i] += _oscillator.valueAt(i);
-        }
-        
-        return self.signal;
-      },
-      
-      valueAt: function(_offset) {
+      for ( var i = 0; i < waveLengthSize; i++ ) {
         var value;
-        var step = _offset * cyclesPerSample % 1;
-        
+        var step = i * cyclesPerSample % 1;
+
         switch(waveform) {
           case Processing.SINEWAVE:
             value = Math.sin(TWO_PI * step);
@@ -236,14 +216,63 @@ PJSAudio = {
             value = 1 - 4 * Math.abs(Math.round(step) - step);
             break;
         }
+        waveLength[i] = value * amplitude;
+      }
+    }
+    
+    calcWaveLength();
+    
+    var self = {
+      signal: new Array(bufferSize),
+      
+      setAmp: function(_amplitude) {
+        if (_amplitude >= 0 && _amplitude <= 1) {
+          amplitude = _amplitude;
+          calcWaveLength();
+        } else {
+          throw "Amplitude out of range (0..1).";
+        }
+      },
+      
+      setFreq: function(_frequency) {
+        frequency = _frequency;
+        cyclesPerSample = frequency / sampleRate;
+        calcWaveLength();
+      },
+      
+      // Add a oscillator
+      add: function(_oscillator) {
+        for ( var i = 0; i < bufferSize; i++ ) {
+          self.signal[i] += _oscillator.valueAt(i);
+        }
         
-        return value * amplitude;
+        return self.signal;
+      },
+      
+      // Add a signal to the current generated osc signal
+      addSignal: function(_signal) {
+        for ( var i = 0; i < _signal.length; i++ ) {
+          if ( i >= bufferSize ) {
+            break;
+          }
+          self.signal[i] += _signal[i];
+        }
+        return self.signal;
+      },
+      
+      valueAt: function(_offset) {
+        return waveLength[_offset % waveLength.length];
       },
       
       generate: function() {
         var frameOffset = frameCount * bufferSize;
+        var offset;
+        var waveLengthSize = waveLength.length;
+        
         for ( var i = 0; i < bufferSize; i++ ) {
-          self.signal[i] = self.valueAt(frameOffset + i);
+          //self.signal[i] = self.valueAt(frameOffset + i);
+          offset = (frameOffset + i) % waveLengthSize;
+          self.signal[i] = waveLength[offset];
         }
         frameCount++;
         
@@ -300,6 +329,14 @@ PJSAudio = {
         }
         
         return _buffer;
+      },
+      
+      done: function() {
+        if ( samplesProcessed > release ) {
+          return true;
+        } else {
+          return false;
+        }
       }
     };
     
@@ -380,7 +417,51 @@ PJSAudio = {
     };
     
     return self;
-  } // END IIRFilter
+  }, // END IIRFilter
+  
+  LP12: function(_cutoff, _resonance, _sampleRate) {
+    var cutoff, resonance, sampleRate = _sampleRate;
+    
+    var w, q, r, c, vibraPos = 0, vibraSpeed = 0;
+    
+    var calcCoeff = function(_cutoff, _resonance) {
+      w = 2.0 * Math.PI * _cutoff / sampleRate;
+      q = 1.0 - w / (2.0 * (_resonance + 0.5 / (1.0 + w)) + w - 2.0);
+      r = q * q;
+      c = r + 1.0 - 2.0 * Math.cos(w) * q;
+      
+      cutoff = _cutoff;
+      resonance = _resonance;
+    }
+
+    calcCoeff(_cutoff, _resonance);
+    
+    var self = {
+      set: function(_cutoff, _resonance) {
+        calcCoeff(_cutoff, _resonance);
+      },
+      
+      process: function(_buffer) {
+        for ( var i = 0; i < _buffer.length; i++ ) {
+          vibraSpeed += (_buffer[i] - vibraPos) * c;
+          vibraPos += vibraSpeed;
+          vibraSpeed *= r;
+          
+          var temp = vibraPos;
+          
+          if ( temp > 1.0 ) {
+            temp = 1.0;
+          } else if ( temp < -1.0 ) {
+            temp = -1.0;
+          }
+          
+          _buffer[i] = temp;
+        }
+      }
+    };
+    
+    return self;   
+  } // END LP12
 };
   
 /*

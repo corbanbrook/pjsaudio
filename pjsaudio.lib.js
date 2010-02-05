@@ -32,8 +32,13 @@
  *   
  */
 
-PJSAudio = {
-  DFT: function(_bufferSize, _sampleRate) {
+//Wrap in this:
+//(function() { Processing.lib.PJSAudio = function(){}; })();
+
+
+(function(){ 
+
+  Processing.lib.DFT = function(_bufferSize, _sampleRate) {
     var bufferSize = _bufferSize;
     var sampleRate = _sampleRate;
     
@@ -78,9 +83,9 @@ PJSAudio = {
     self.buildTrigTables();
     
     return self;
-  }, // END DFT
+  }; // END DFT
     
-  FFT: function(_bufferSize, _sampleRate) {
+  Processing.lib.FFT = function(_bufferSize, _sampleRate) {
     var bufferSize = _bufferSize;
     var sampleRate = _sampleRate;
 
@@ -167,7 +172,7 @@ PJSAudio = {
     self.buildTrigTables();
 
     return self;
-  }, // END FFT
+  }; // END FFT
   
   /*  Oscillator Signal Generator
    *    
@@ -175,13 +180,15 @@ PJSAudio = {
    *         var signal = sine.generate();
    *
    */
-   
-  SINEWAVE:     1,
-  SQUAREWAVE:   2,
-  SAWWAVE:      3,
-  TRIANGLEWAVE: 4,
   
-  Oscillator: function(_waveform, _frequency, _amplitude, _bufferSize, _sampleRate) {
+  Processing.lib.PJSAudio = {
+    SINEWAVE:     1,
+    SQUAREWAVE:   2,
+    SAWWAVE:      3,
+    TRIANGLEWAVE: 4
+  };
+  
+  Processing.lib.Oscillator = function(_waveform, _frequency, _amplitude, _bufferSize, _sampleRate) {
     var waveform = _waveform;
     var frequency = _frequency;
     var amplitude = _amplitude;
@@ -224,6 +231,8 @@ PJSAudio = {
     
     var self = {
       signal: new Array(bufferSize),
+      envelope: null,
+      envelopedSignal: new Array(bufferSize),
       
       setAmp: function(_amplitude) {
         if (_amplitude >= 0 && _amplitude <= 1) {
@@ -260,6 +269,11 @@ PJSAudio = {
         return self.signal;
       },
       
+      // Add an envelope to the oscillator
+      addEnvelope: function(_envelope) {
+        self.envelope = _envelope;
+      },
+      
       valueAt: function(_offset) {
         return waveLength[_offset % waveLength.length];
       },
@@ -270,10 +284,15 @@ PJSAudio = {
         var waveLengthSize = waveLength.length;
         
         for ( var i = 0; i < bufferSize; i++ ) {
-          //self.signal[i] = self.valueAt(frameOffset + i);
           offset = (frameOffset + i) % waveLengthSize;
-          self.signal[i] = waveLength[offset];
+
+          if ( self.envelope != null ) {
+            self.signal[i] = self.envelope.processSample(waveLength[offset]);
+          } else {
+            self.signal[i] = waveLength[offset];
+          }
         }
+        
         frameCount++;
         
         return self.signal;
@@ -281,9 +300,9 @@ PJSAudio = {
     };
     
     return self;
-  }, // END Oscillator
+  }; // END Oscillator
   
-  ADSR: function(_attackLength, _decayLength, _sustainLevel, _sustainLength, _releaseLength, _sampleRate) {
+  Processing.lib.ADSR = function(_attackLength, _decayLength, _sustainLevel, _sustainLength, _releaseLength, _sampleRate) {
     var attackLength  = _attackLength;
     var decayLength   = _decayLength;
     var sustainLevel  = _sustainLevel;
@@ -324,6 +343,7 @@ PJSAudio = {
           else if ( samplesProcessed > sustain && samplesProcessed <= release ) {
             amplitude = sustainLevel + (0 - sustainLevel) * ((samplesProcessed - sustain) / (release - sustain));
           }
+          
           _buffer[i] *= amplitude;
           samplesProcessed++;
         }
@@ -331,22 +351,43 @@ PJSAudio = {
         return _buffer;
       },
       
-      done: function() {
+      processSample: function(_sample) {
+        var amplitude = 0;
+        
+        if ( samplesProcessed <= attack ) {
+          amplitude = 0 + (1 - 0) * ((samplesProcessed - 0) / (attack - 0));
+        } 
+        else if ( samplesProcessed > attack && samplesProcessed <= decay ) {
+          amplitude = 1 + (sustainLevel - 1) * ((samplesProcessed - attack) / (decay - attack));
+        } 
+        else if ( samplesProcessed > decay && samplesProcessed <= sustain ) {
+          amplitude = sustainLevel;
+        } 
+        else if ( samplesProcessed > sustain && samplesProcessed <= release ) {
+          amplitude = sustainLevel + (0 - sustainLevel) * ((samplesProcessed - sustain) / (release - sustain));
+        }
+        
+        samplesProcessed++;
+        
+        return _sample * amplitude;
+      },
+      
+      isActive: function() {
         if ( samplesProcessed > release ) {
-          return true;
-        } else {
           return false;
+        } else {
+          return true;
         }
       }
     };
     
     return self;
-  }, // END ADSR
+  }; // END ADSR
   
-  LOWPASS:  1,
-  HIGHPASS: 2,
+  Processing.lib.PJSAudio.LOWPASS =  1;
+  Processing.lib.PJSAudio.HIGHPASS = 2;
   
-  IIRFilter: function(_filter, _frequency, _sampleRate) {
+  Processing.lib.IIRFilter = function(_filter, _frequency, _sampleRate) {
     var filter = _filter;
     var frequency = _frequency;
     var sampleRate = _sampleRate;
@@ -417,9 +458,9 @@ PJSAudio = {
     };
     
     return self;
-  }, // END IIRFilter
+  }; // END IIRFilter
   
-  LP12: function(_cutoff, _resonance, _sampleRate) {
+  Processing.lib.LP12 = function(_cutoff, _resonance, _sampleRate) {
     var cutoff, resonance, sampleRate = _sampleRate;
     
     var w, q, r, c, vibraPos = 0, vibraSpeed = 0;
@@ -447,6 +488,7 @@ PJSAudio = {
           vibraPos += vibraSpeed;
           vibraSpeed *= r;
           
+          /*
           var temp = vibraPos;
           
           if ( temp > 1.0 ) {
@@ -456,13 +498,15 @@ PJSAudio = {
           }
           
           _buffer[i] = temp;
+          */
+          
+          _buffer[i] = vibraPos;
         }
       }
     };
     
     return self;   
-  } // END LP12
-};
+  }; // END LP12
   
 /*
  *  BeatDetektor.js
@@ -566,12 +610,12 @@ PJSAudio = {
   detection than others so that there's a focus window.
 
 */
-BeatDetektor = function(bpm_minimum, bpm_maximum)
+Processing.lib.BeatDetektor = function(bpm_minimum, bpm_maximum)
 {
   if (typeof(bpm_minimum)=='undefined') bpm_minimum = 90.0;
   if (typeof(bpm_maximum)=='undefined') bpm_maximum = 179.0
   
-  this.config = BeatDetektor.config;
+  this.config = Processing.lib.BeatDetektor.config;
   
   this.BPM_MIN = bpm_minimum;
   this.BPM_MAX = bpm_maximum;
@@ -608,11 +652,11 @@ BeatDetektor = function(bpm_minimum, bpm_maximum)
   }
 }
 
-BeatDetektor.prototype.reset = function()
+Processing.lib.BeatDetektor.prototype.reset = function()
 {
   var bpm_avg = 60.0/((this.BPM_MIN+this.BPM_MAX)/2.0);
 
-  this.config = BeatDetektor.config;
+  this.config = Processing.lib.BeatDetektor.config;
 
   for (var i = 0; i < this.config.BD_DETECTION_RANGES; i++)
   {
@@ -648,7 +692,7 @@ BeatDetektor.prototype.reset = function()
 }
 
 // Default configuration parameters
-BeatDetektor.config = {
+Processing.lib.BeatDetektor.config = {
   BD_DETECTION_RANGES : 128,
   BD_DETECTION_RATE : 10.0,
   BD_DETECTION_FACTOR : 0.98,
@@ -664,7 +708,7 @@ BeatDetektor.config = {
   BD_REWARD_MULTIPLIERS : [ 6.0, 4.0, 2.0, 0.5, 0.25, 0.125 ]
 };
 
-BeatDetektor.prototype.process = function(timer_seconds, fft_data)
+Processing.lib.BeatDetektor.prototype.process = function(timer_seconds, fft_data)
 {
   if (!this.last_timer) { this.last_timer = timer_seconds; return; }  // ignore 0 start time
   
@@ -955,33 +999,33 @@ BeatDetektor.prototype.process = function(timer_seconds, fft_data)
 }
 
 // Sample Modules
-BeatDetektor.modules = new Object(); 
-BeatDetektor.modules.vis = new Object();
+Processing.lib.BeatDetektor.modules = new Object(); 
+Processing.lib.BeatDetektor.modules.vis = new Object();
 
 // simple bass kick visualizer assistant module
-BeatDetektor.modules.vis.BassKick = function()
+Processing.lib.BeatDetektor.modules.vis.BassKick = function()
 {
   this.is_kick = false;
 }
 
-BeatDetektor.modules.vis.BassKick.prototype.process = function(det)
+Processing.lib.BeatDetektor.modules.vis.BassKick.prototype.process = function(det)
 {
   this.is_kick = (det.detection[0] && (det.ma_freq_range[0]/det.maa_freq_range[0] > 1.1 ));
 }
 
-BeatDetektor.modules.vis.BassKick.prototype.isKick = function()
+Processing.lib.BeatDetektor.modules.vis.BassKick.prototype.isKick = function()
 {
   return this.is_kick;
 }
 
 
 // simple vu spectrum visualizer assistant module
-BeatDetektor.modules.vis.VU = function()
+Processing.lib.BeatDetektor.modules.vis.VU = function()
 {
   this.vu_levels = new Array(); 
 }
 
-BeatDetektor.modules.vis.VU.prototype.process = function(detektor)
+Processing.lib.BeatDetektor.modules.vis.VU.prototype.process = function(detektor)
 {
   var det = detektor;
   
@@ -1022,11 +1066,14 @@ BeatDetektor.modules.vis.VU.prototype.process = function(detektor)
 }
 
 // returns vu level for BD_DETECTION_RANGES range[x]
-BeatDetektor.modules.vis.VU.prototype.getLevel = function(x)
+Processing.lib.BeatDetektor.modules.vis.VU.prototype.getLevel = function(x)
 {
   return this.vu_levels[x];
 }
 
-PJSAudio.BeatDetektor = BeatDetektor;
+//PJSAudio.BeatDetektor = BeatDetektor;
   
-Processing.Import(PJSAudio);
+//Processing.Import(PJSAudio);
+//Processing.lib.PJSAudio = PJSAudio;
+
+})();

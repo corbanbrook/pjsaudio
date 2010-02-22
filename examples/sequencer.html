@@ -14,7 +14,8 @@
     <script src="../pjsaudio.lib.js"></script>
     <script>
       $(function() {
-        $('#A').slider({ orientation: 'vertical', range: 'min', value: 0.02, min: 0, max: 1.0, step: 0.01 });
+        $('#amp').slider({ orientation: 'vertical', range: 'min', min: 0, max: 1, step: 0.01, value: 0.7, slide: changeAmplitude });
+        $('#A').slider({ orientation: 'vertical', range: 'min', value: 0.02, min: 0.01, max: 1.0, step: 0.01 });
         $('#D').slider({ orientation: 'vertical', range: 'min', value: 0.6, min: 0, max: 1.0, step: 0.01 });
         $('#S').slider({ orientation: 'vertical', range: 'min', value: 0.3, min: 0, max: 1.0, step: 0.01 });
         $('#R').slider({ orientation: 'vertical', range: 'min', value: 0.8, min: 0, max: 5.0, step: 0.01 });
@@ -69,27 +70,35 @@
   <body>
     <audio id="audio1"></audio>
     <script>
+      var SHOW_SEQUENCER = true;
+    
       // Setup shared variables
-      var sampleRate = 44100.0;
-      var bufferSize = 2048;
+      var sampleRate = 22050;
+      var bufferSize = 1024;
       var bufferTime = 1000 / (sampleRate / bufferSize);
       
-      var bpm = 60;
+      var fft;
+      var osc;
+      var lp12;
       
-      var sequencerTicksPerMillisecond = bpm * 8 / 60000;
-      var sequencerStep = 0;
-
-      var polyphony = 4;
+      var frequency = 440;
       
-      var oscPool = new Array(polyphony);
-      for ( var i = 0; i < oscPool.length; i++ ) {
-        oscPool[i] = {osc: null, adsr: null, timestamp: null};
+      var amplitude = 0.7; // Default amplitude at 70%
+      
+      var changeAmplitude = function() {
+        amplitude = $('#amp').slider('option', 'value'); 
+        $('#ampLevel').html(Math.round(amplitude * 100) + "%");
       }
       
-      var oscCount = 0;
-
-      var SHOW_SEQUENCER = true;
-      var PLAY = true;
+      var bpm = 60; // Beats per minute
+      
+      var sequencerStep = 0; // Sequencer step postion
+      
+      var sequencerTicksPerMillisecond = bpm * 8 / 60000; // Sequencer Ticks each millisecond. A Tick is a partial step.
+      
+      var polyphony = 8; // Number of oscillators that can be played at the same time
+      var oscPool = new Array(); // Pool of active oscillators
+      var oscTable = new Array(24); // Table of oscillators for each note.. so generation is quicker
 
       var sequencer = new Array(32);
       for ( var i = 0; i < sequencer.length; i++ ) {
@@ -107,7 +116,7 @@
         }
       }
 
-      var oct = 3;
+      var oct = 3; // Root Octave
 
       // Borrowed from F1LTER's code
       var midiNoteFreq =  /* 0 */ [ 16.35,    17.32,    18.35,    19.45,    20.6,     21.83,    23.12,    24.5,     25.96,    27.5,  29.14,    30.87,
@@ -120,45 +129,60 @@
                           /* 7 */   2093,     2217.46,  2349.32,  2489.02,  2637.02,  2793.83,  2959.96,  3135.96,  3322.44,  3520,  3729.31,  3951.07,
                           /* 8 */   4186.01,  4434.92,  4698.64,  4978 ];
 
-      var fft;
-      var osc;
-      var lp12;
 
-      var skip = 0;
+
       var writeCount = 0;
 
-
-      var timeStamp = (new Date()).getTime();
-        
+      var timeStamp = (new Date()).getTime();  
+      
+      
+      // Setup experimental audio out
       var a = document.getElementById('audio1');
+      
       if ( typeof a.mozSetup == 'function' ) {
         a.mozSetup(1, sampleRate, 1);
       }
       
-      var audioWriter = function() {        
+      
+      var timePerWrite = 0;
+      
+      var audioWriter = function() {
+        var startTime = (new Date()).getTime();        
         var currentTime = (new Date()).getTime();
         var mergedOsc; // undefined
         
         for ( var i = 0; i < oscPool.length; i++ ) {
-          if ( oscPool[i].osc != null && !oscPool[i].adsr.done() ) {
-            oscPool[i].osc.generate();
-            oscPool[i].adsr.process(oscPool[i].osc.signal);
-          }
-          
-          if ( typeof mergedOsc == 'undefined' && oscPool[i].osc != null ) {
-            mergedOsc = oscPool[i].osc;
-          } else if ( typeof mergedOsc != 'undefined' && oscPool[i].osc != null ) {
-            mergedOsc.addSignal(oscPool[i].osc.signal);
+          // Generate new frame of the signal
+          if ( oscPool[i].envelope.isActive() ) {
+            oscPool[i].generate(); // This generates a new frameBuffer of signal and applies the envelope as it goes.
+            oscPool[i].envelope.process(oscPool[i].signal);
+            
+            if ( typeof mergedOsc == 'undefined' ) {
+              mergedOsc = oscPool[i];
+            } else {
+              mergedOsc.addSignal(oscPool[i].signal);
+            }
+          } else {
+            oscPool[i] = null; // Mark for deletion
           }
         }
         
-        // set the global osc object
+        // Delete marked oscillators from the pool
+        var tmpPool = new Array();
+        for ( var i = 0; i < oscPool.length; i++ ) {
+          if ( oscPool[i] != null ) {
+            tmpPool.push(oscPool[i]);
+          }
+        }
+        oscPool = tmpPool;
+        
+        // Set the global osc object
         if ( typeof mergedOsc != 'undefined' ) {
           osc = mergedOsc;
+    
+          lp12.set($('#cutoff').slider('option', 'value'), $('#res').slider('option', 'value'));
+          lp12.process(osc.signal);
         }
-        
-        lp12.set($('#cutoff').slider('option', 'value'), $('#res').slider('option', 'value'));
-        lp12.process(osc.signal);
           
         if ( typeof a.mozWriteAudio == 'function' ) {
           a.mozWriteAudio(osc.signal.length, osc.signal);
@@ -169,6 +193,9 @@
         sequencerStep += (currentTime - timeStamp) * sequencerTicksPerMillisecond;
           
         timeStamp = (new Date()).getTime();
+        var endTime = (new Date()).getTime();
+        
+        timePerWrite = endTime - startTime;
       }
     </script>
       
@@ -176,21 +203,21 @@
       float scale = 90.0;
       int waveform = 2;
       int filter = 1;
-      float frequency;
-      float amplitude = 0.5;
-      float cutoff = 200;
       
       void setup() {
         size(512, 200);
         
-        fft = FFT(bufferSize, sampleRate);
+        fft = new FFT(bufferSize, sampleRate);
         
-        osc = Oscillator(SINEWAVE, 440, 0, bufferSize, sampleRate);
+        osc = new Oscillator(PJSAudio.SINEWAVE, 440, 0, bufferSize, sampleRate);
         osc.generate();
         
-        adsr = ADSR(0.02, 0.01, 0.3, 0.1, 0.5, sampleRate);
-          
-        //iir = IIRFilter(LOWPASS, 200, sampleRate);
+        // Gerenate oscillator lookup table 
+        /*for ( int i = 0; i < oscTable.length; i++ ) {
+          oscTable[i] = new Oscillator(waveform, midiNoteFreq[12*oct+(24-i)], amplitude, bufferSize, sampleRate);
+          oscTable[i].generate();
+        }*/
+        
         lp12 = LP12(bufferSize/2, 1.0, sampleRate);
         
         setInterval(audioWriter, bufferTime); // launch audioWriter timer
@@ -200,21 +227,13 @@
         var startTime = (new Date()).getTime();
         
         int sequencerCol = Math.floor(sequencerStep) % 32;
-        
+        /*
         for (int r = 0; r < 24; r++ ) {
           if ( sequencer[sequencerCol][r] == true ) {
             background(255, 255, 255, 10);
           }
-        }
+        }*/
         background(0, 0, 30, 50);
-        
-        //
-        oscCount = 0;
-        for ( int i = 0; i < polyphony; i++ ) {
-          if ( oscPool[i].osc != null && !oscPool[i].adsr.done() ) {
-            oscCount++;
-          }
-        }
 
         // Check sequencer column for notes to trigger
         for ( int i = 0; i < 24; i ++ ) {  
@@ -223,28 +242,35 @@
             
             frequency = midiNoteFreq[12*oct+(24-i)];
             
-            // add oscillator to osc pool
-            var oscAdded = false;
-            
-            for ( int j = 0; j < polyphony; j++ ) {
-              // find a vacant spot for the osc in the pool.
-              if ( oscPool[j].osc == null || oscPool[j].adsr.done() ) {
-                oscPool[j].osc = Oscillator(waveform, frequency, amplitude, bufferSize, sampleRate);
-                oscPool[j].adsr = new ADSR($('#A').slider('option', 'value'), $('#D').slider('option', 'value'), $('#S').slider('option', 'value'), bufferTime / 1000, $('#R').slider('option', 'value'), sampleRate);
-                oscPool[j].timeStamp = (new Date()).getTime();
-                oscPool[j].adsr.trigger();
-                oscAdded = true;
-                break;
-              }
-            }
-            
-            // if there wasnt a free spot for it, overwrite the first position
-            if ( !oscAdded ) {
-              oscPool[0].osc = Oscillator(waveform, frequency, amplitude, bufferSize, sampleRate);
-              oscPool[0].adsr = new ADSR($('#A').slider('option', 'value'), $('#D').slider('option', 'value'), $('#S').slider('option', 'value'), bufferTime / 1000, $('#R').slider('option', 'value'), sampleRate);
-              oscPool[0].adsr.trigger();
+            // Add oscillator to the pool
+            if ( oscPool.length < polyphony ) {
+              var index = oscPool.length;
+              
+              
+              oscPool[index] = Oscillator(waveform, frequency, amplitude, bufferSize, sampleRate);
+              oscPool[index].addEnvelope(ADSR($('#A').slider('option', 'value'), $('#D').slider('option', 'value'), $('#S').slider('option', 'value'), bufferTime / 1000, $('#R').slider('option', 'value'), sampleRate));
+              oscPool[index].envelope.trigger();
+              
+              /*
+              oscPool[index] = oscTable[i];
+              oscPool[index].addEnvelope(new ADSR($('#A').slider('option', 'value'), $('#D').slider('option', 'value'), $('#S').slider('option', 'value'), bufferTime / 1000, $('#R').slider('option', 'value'), sampleRate));
+              oscPool[index].envelope.trigger();
+              */
+            } else {
+              
+              
+              oscPool[0] = Oscillator(waveform, frequency, amplitude, bufferSize, sampleRate);
+              oscPool[0].addEnvelope(ADSR($('#A').slider('option', 'value'), $('#D').slider('option', 'value'), $('#S').slider('option', 'value'), bufferTime / 1000, $('#R').slider('option', 'value'), sampleRate));
+              oscPool[0].envelope.trigger();
+              
+              /*
+              oscPool[0] = oscTable[i];
+              oscPool[0].addEnvelope(new ADSR($('#A').slider('option', 'value'), $('#D').slider('option', 'value'), $('#S').slider('option', 'value'), bufferTime / 1000, $('#R').slider('option', 'value'), sampleRate));
+              oscPool[0].envelope.trigger();
+              */
             }
           }
+          
           if ( sequencer[sequencerCol][i] == false && sequencerCol > 0 ) {
             sequencerNoteOn[sequencerCol-1][i] = false;
           } else if ( sequencer[sequencerCol][i] == false && sequencerCol == 0 ) {
@@ -256,10 +282,19 @@
         //fft.forward(osc.signal);
 
         if ( SHOW_SEQUENCER ) {
+          /*
+           *  Sequencer View
+           *
+           *  Show step sequencer
+           *
+           */
           stroke(200, 255, 255, 20); 
+          // Render horozontal lines
           for (int i = 0; i < 24; i++ ) {
             line(0, i * (height/24), width, i * (height/24));
           }
+          
+          // Render vertical lines
           for (int i = 0; i < 32; i++ ) {
             if ( i % 8 == 0 ) {
               strokeWeight(2);
@@ -270,7 +305,7 @@
             }
             line(i * (width/32), 0, i * (width/32), height);
             
-            // draw bar
+            // Render sequencer step position
             if ( i == Math.floor(sequencerStep % 32) ) {
               noStroke();
               fill(200, 255, 255, 60);
@@ -294,28 +329,36 @@
             }
           }
         } else {
-          //stroke(255);
+          /*
+           *  Signal View
+           *
+           *  Show signal output
+           *
+           */
           strokeWeight(1.5);
           stroke(155, 200, 220);
-          for ( int i = 0; i < width - 1; i++ ) {   
-            line(i, scale + 10 - osc.signal[i] * scale, i+1, scale + 10 - osc.signal[i+1] * scale);
+          for ( int i = 0; i < width/4 - 1; i++ ) {   
+            line(4*i, scale + 10 - osc.signal[4*i] * scale, 4*(i+1), scale + 10 - osc.signal[4*(i+1)] * scale);
           }
         }
 
         var endTime = (new Date()).getTime();
         
-        $('#debug').html("Time/frame (milliseconds): " + ( endTime - startTime ) + "<br>" +
+        $('#debug').html(    
+          "Time/frame (milliseconds): " + ( endTime - startTime ) + "<br>" +
+          "Time/write (milliseconds): " + ( timePerWrite ) + "<br>" +
           "Audio frame size: " + bufferSize + "<br>" +
           "Audio frames written: " + writeCount + "<br>" +
           "Time (seconds): " + ((writeCount * bufferSize) / sampleRate) + "<br>" +
           "Sequencer BPM: " + bpm + "<br>" +
           "Sequencer steps/second: " + sequencerTicksPerMillisecond * 1000 + "<br>" +
-          "Active oscillators (polyphony): " + oscCount
+          'Active oscillators (polyphony): ' + oscPool.length
         );
       }
 
       void mouseReleased() {
         if ( SHOW_SEQUENCER ) {
+          // Plot notes in sequencer
           var col = parseInt(mouseX / (width/32));
           var row = parseInt(mouseY / (height/24));
           sequencer[col][row] = !sequencer[col][row];
@@ -327,31 +370,36 @@
           waveform += 1;
 
           switch(waveform) {
-            case SINEWAVE:
-            case SQUAREWAVE:
-            case SAWWAVE:
-            case TRIANGLEWAVE:
+            case PJSAudio.SINEWAVE:
+            case PJSAudio.SQUAREWAVE:
+            case PJSAudio.SAWWAVE:
+            case PJSAudio.TRIANGLEWAVE:
               break;
             default:
-              waveform = SINEWAVE;
+              waveform = PJSAudio.SINEWAVE;
               break;
           }
+          
+          // Gerenate oscillator lookup table 
+          /*for ( int i = 0; i < oscTable.length; i++ ) {
+            oscTable[i] = new Oscillator(waveform, midiNoteFreq[12*oct+(24-i)], amplitude, bufferSize, sampleRate);
+          }*/
         }
-
+/*
         if ( key == 'f' ) {
           filter += 1;
 
           switch(filter) {
-            case LOWPASS:
-            case HIGHPASS:
+            case PJSAudio.LOWPASS:
+            case PJSAudio.HIGHPASS:
               break;
             default:
-              filter = LOWPASS;
+              filter = PJSAudio.LOWPASS;
               break;
           }
-          iir = IIRFilter(filter, cutoff, sampleRate);
+          iir = new IIRFilter(filter, cutoff, sampleRate);
         }
-
+*/
         if ( key == 's' ) {
           SHOW_SEQUENCER = !SHOW_SEQUENCER;
         }
@@ -362,16 +410,26 @@
     <p>Sequencer controlled oscillator with envelope and filter.</p>
 
     <p><b>Click in the sequencer grid to plot notes. Switch to the signal view and adjust the envelope and filter to see the resulting waveforms.</b></p>
-    <p>Keyboard Commands:
-      <ul>
-        <li><b>S</b> - toggle between sequencer/signal view</li>
-        <li><b>W</b> - change waveform</li>
-      </ul>
-    </p>
+    <p>Keyboard Commands:</p>
+    
+    <ul>
+      <li><b>S</b> - toggle between sequencer/signal view</li>
+      <li><b>W</b> - change waveform</li>
+    </ul>
+    
 
     <div><canvas id="signal" width="200px" height="200px"></canvas></div>
+    
     <div class="control">
-      <h3>AMP Envelope</h3>
+      <h3>Amp.</h3>
+      <table>
+        <tr>
+          <td><div id="amp" class="slider"></div><div id="ampLevel">70%</div></td>
+        </tr>
+      </table>
+    </div>
+    <div class="control">
+      <h3>Amp. Envelope</h3>
       <table>
         <tr>
           <td><div id="A" class="slider"></div>A</td>

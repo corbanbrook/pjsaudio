@@ -6,75 +6,74 @@
   </head>
   <body>
     <script>
-    // Setup shared variables
-    var bufferSize = 512;
-    var sampleRate = 44100.0;
+      // Setup shared variables
+      var bufferSize = 512;
+      var sampleRate = 44100.0;
 
-    var fft;
-    var sine;
+      var fft;
+      var sine;
     </script>
     
     <script target="#signal" type="application/processing">
-    int nthHarmonic = 1;
-    float frequency = 344.53;
-    float scale = 30.0;
+      int nthHarmonic = 1;
+      float frequency = 344.53;
+      float scale = 30.0;
 
-    void setup() {
-      size(bufferSize, 100);
-      frameRate(60);
-      
-      fft = FFT(bufferSize, sampleRate);
-      
-      sine = Oscillator(SINEWAVE, frequency, 1, bufferSize, sampleRate);
-      sine.generate();
-    }
-
-    void draw() {
-      background(0, 60);
-
-      if (nthHarmonic > 40 ) 
-      {
-        nthHarmonic = 1;
-        sine.generate();
+      void setup() {
+        size(bufferSize, 100);
+        frameRate(5);
+        
+        fft = new FFT(bufferSize, sampleRate);
+        
+        sine = new Oscillator(PJSAudio.SINEWAVE, frequency, 1, bufferSize, sampleRate);
       }
-      
-      // Add harmonic
-      if ( nthHarmonic > 1 ) {
-        harmonic = Oscillator(SINEWAVE, frequency*nthHarmonic, 1/nthHarmonic, bufferSize, sampleRate); 
-        sine.add(harmonic); 
-      }
-      
-      nthHarmonic += 2; // 3rd, 5th, 7th, 9th, etc
 
-      // Calculate forward transform
-      fft.forward(sine.signal);
-      
-      // Draw additive signal
-      stroke(100, 255 - (2 * nthHarmonic), 2 * nthHarmonic);
-      strokeWeight(1.5);
-      
-      for ( int i = 0; i < bufferSize - 1; i++ ) {
-        line(i, scale + 10 - sine.signal[i] * scale, i+1, scale + 10 - sine.signal[i+1] * scale);
+      void draw() {
+        background(0);
+
+        if (nthHarmonic > 40 ) 
+        {
+          nthHarmonic = 1;
+          sine.generate();
+        }
+        
+        // Add harmonic
+        if ( nthHarmonic > 1 ) {
+          harmonic = new Oscillator(PJSAudio.SINEWAVE, frequency*nthHarmonic, 1/nthHarmonic, bufferSize, sampleRate); 
+          sine.add(harmonic); 
+        }
+        
+        nthHarmonic += 2; // 3rd, 5th, 7th, 9th, etc
+
+        // Calculate forward transform
+        fft.forward(sine.signal);
+        
+        // Draw additive signal
+        stroke(255);
+        strokeWeight(1.5);
+        
+        for ( int i = 0; i < bufferSize - 1; i++ ) {
+          line(i, scale + 10 - sine.signal[i] * scale, i+1, scale + 10 - sine.signal[i+1] * scale);
+        }
       }
-    }
     </script>
   
     <script target="#fft" type="application/processing">
-    void setup() {
-      size(bufferSize, 300);
-    }
-    
-    void draw() {
-      background(0);
-      
-      // Draw spectrum
-      stroke(255);
-      strokeWeight(1.5);
-      
-      for ( int i = 0; i < fft.spectrum.length - 1; i++ ) {
-        line(2*i, height - 10 - fft.spectrum[i] * bufferSize, 2*i+1, height - 10 - fft.spectrum[i+1] * bufferSize);
+      void setup() {
+        size(bufferSize, 300);
       }
-    } 
+      
+      void draw() {
+        background(0);
+        
+        // Draw spectrum
+        stroke(255);
+        strokeWeight(1.5);
+        
+        for ( int i = 0; i < fft.spectrum.length - 1; i++ ) {
+          line(2*i, height - 10 - fft.spectrum[i] * bufferSize, 2*i+1, height - 10 - fft.spectrum[i+1] * bufferSize);
+        }
+      } 
     </script>
     
     <h1>Building a Square wave</h1>

@@ -33,6 +33,16 @@
  */
 
 (function(){ 
+  
+  // Contants
+  PJSAudio = {
+    SINEWAVE:     1,
+    SQUAREWAVE:   2,
+    SAWWAVE:      3,
+    TRIANGLEWAVE: 4,
+    LOWPASS:      5,
+    HIGHPASS:     6
+  };
 
   Processing.lib.DFT = function(_bufferSize, _sampleRate) {
     var bufferSize = _bufferSize;
@@ -176,14 +186,7 @@
    *         var signal = sine.generate();
    *
    */
-  
-  Processing.lib.PJSAudio = {
-    SINEWAVE:     1,
-    SQUAREWAVE:   2,
-    SAWWAVE:      3,
-    TRIANGLEWAVE: 4
-  };
-  
+
   Processing.lib.Oscillator = function(_waveform, _frequency, _amplitude, _bufferSize, _sampleRate) {
     var waveform = _waveform;
     var frequency = _frequency;
@@ -206,16 +209,16 @@
         var step = i * cyclesPerSample % 1;
 
         switch(waveform) {
-          case Processing.SINEWAVE:
+          case PJSAudio.SINEWAVE:
             value = Math.sin(TWO_PI * step);
             break;
-          case Processing.SQUAREWAVE:
+          case PJSAudio.SQUAREWAVE:
             value = step < 0.5 ? 1 : -1;
             break;
-          case Processing.SAWWAVE:
+          case PJSAudio.SAWWAVE:
             value = 2 * (step - Math.round(step));
             break;
-          case Processing.TRIANGLEWAVE:
+          case PJSAudio.TRIANGLEWAVE:
             value = 1 - 4 * Math.abs(Math.round(step) - step);
             break;
         }
@@ -380,9 +383,6 @@
     return self;
   }; // END ADSR
   
-  Processing.lib.PJSAudio.LOWPASS =  1;
-  Processing.lib.PJSAudio.HIGHPASS = 2;
-  
   Processing.lib.IIRFilter = function(_filter, _frequency, _sampleRate) {
     var filter = _filter;
     var frequency = _frequency;
@@ -394,12 +394,12 @@
     var calcCoeff = function() {
       var fracFreq = frequency/sampleRate;
       switch(filter) {
-      case Processing.LOWPASS:
+      case PJSAudio.LOWPASS:
         var x = Math.exp(-2*Math.PI * fracFreq);
             a = [ 1 - x ];
             b = [ x ];
         break;
-      case Processing.HIGHPASS:
+      case PJSAudio.HIGHPASS:
         var x = Math.exp(-2 * Math.PI * fracFreq);
             a = [ (1+x)/2, -(1+x)/2 ];
             b = [ x ];

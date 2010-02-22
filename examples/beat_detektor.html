@@ -1,0 +1,101 @@
+<html>
+  <head>      
+    <script language="javascript" src="js/processing.js"></script>
+    <script language="javascript" src="js/init.js"></script>
+    <script language="javascript" src="../pjsaudio.lib.js"></script>
+    <script language="javascript" src="../modules/beatdetektor.lib.js"></script>
+  </head>
+  <body>
+    <script>
+      var signal = {
+        timestamp: null,
+        stereo: null,
+        mix: new Array(2048),
+      };
+
+      function audioWritten(event) {
+        signal.stereo = event.mozFrameBuffer;
+        signal.timestamp = new Date().getTime() / 1000;
+        // create a stereo mix 
+        for ( var i = 0; i < 2048; i++ ) {
+          if ( signal.stereo.length > i ) {
+            signal.mix[i] = (signal.stereo.item(2*i) + signal.stereo.item(2*i+1)) / 2;
+          } else {
+            signal.mix[i] = 0.0;
+          }
+        }
+      }
+    </script>
+    
+    <script target="#fft" type="application/processing">
+      FFT fft;
+      BeatDetektor bd;
+      BassKick kick_det;
+
+      PFont font; 
+
+      void setup() {
+        size(512, 200);
+        //frameRate(30);
+        
+        fft = new FFT(2048, 44100);
+        bd = new BeatDetektor();
+        kick_det = new BeatDetektor.modules.vis.BassKick();      
+        font = loadFont("Arial");
+        textFont(font, 32);
+      }
+      
+      void draw() {
+        background(0, 0, 30, 50);
+        
+        strokeWeight(1);
+        
+        // draw signal
+  /*
+        for ( int i = 0; i < signal.mix.length/4 - 1; i++) {
+          stroke(300 * signal.mix[4*i] + 155, 200, 100 * signal.mix[4*i] * -1 + 100, 255 * Math.abs(signal.mix[4*i] + 50));
+          line(i, 50 - signal.mix[4*i] * 50, i + 1, 50 - signal.mix[4*(i+1)] * 50)
+        }
+  */    
+        strokeWeight(1.0);
+        
+        fft.forward(signal.mix);
+        
+        bd.process(signal.timestamp, fft.spectrum);
+        kick_det.process(bd);
+
+        if ( kick_det.isKick() ) {
+          background(255, 0, 0, 50); 
+        }
+        
+        text(bd.win_bpm_int_lo + " BPM (" + FRAME_RATE.toFixed(2) + " fps)", width/2 - 100, height/2);
+        //text(60/bd.current_bpm + " BPM (" + FRAME_RATE.toFixed(2) + " fps)", width/2 - 100, height/2);
+        //text(bd.winning_bpm + " BPM (" + FRAME_RATE.toFixed(2) + " fps)", width/2 - 100, height/2);
+        text(bd.beat_counter + " beats", width/2 - 100, height/2 + 50);
+        
+        
+  /*      for ( int i = 0; i < fft.spectrum.length/2; i++ ) {
+          var magnitude = fft.spectrum[i] * 2048;
+          stroke(50 + magnitude/4, 255, 230, 20 + magnitude);
+          line(2*i, height, 2*i, height - magnitude);
+        }
+  */
+        noStroke();
+        
+        if ( bd.beat_counter % 4 == 0 ) {
+          rect(10, 10, 50, 50);
+        } else if ( bd.beat_counter % 4 == 1 ) {
+          rect(70, 10, 50, 50);
+        } else if ( bd.beat_counter % 4 == 2 ) {
+          rect(70, 70, 50, 50);
+        } else if ( bd.beat_counter % 4 == 3 ) {
+          rect(10, 70, 50, 50);
+        }
+      } 
+    </script>
+    
+    <audio src="corban1.ogg" controls="true" onaudiowritten="audioWritten(event);" style="width:512px;"></audio><br />
+    
+    <div><canvas id="fft" width="200px" height="200px"></canvas></div>
+  </body>
+</html>
